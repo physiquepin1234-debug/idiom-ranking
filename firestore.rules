@@ -1,0 +1,105 @@
+rules_version = '2';
+
+// 전국 관용표현 랭킹전 - Firestore 보안 규칙
+// Firebase 콘솔 > Firestore > 규칙 탭에 전체를 붙여넣고 [게시] 하세요.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    // 1분 동안 낼 수 있는 점수의 상한
+    function validScore(v) {
+      return v is int && v >= 0 && v <= 3000;
+    }
+
+    function smallInt(v) {
+      return v is int && v >= 0 && v <= 200;
+    }
+
+    function validPlayer(d) {
+      return d.keys().hasOnly(['uid', 'nickname', 'schoolCode', 'schoolName', 'schoolRegion', 'grade', 'cls',
+                               'bestScore', 'bestCombo', 'bestCorrect', 'plays', 'lastPlayAt', 'updatedAt'])
+        && d.uid == request.auth.uid
+        && d.nickname is string && d.nickname.size() >= 2 && d.nickname.size() <= 8
+        && d.schoolCode is string && d.schoolCode.size() > 0 && d.schoolCode.size() <= 60
+        && d.schoolName is string && d.schoolName.size() > 0 && d.schoolName.size() <= 40
+        && d.schoolRegion is string && d.schoolRegion.size() <= 20
+        && d.grade is int && d.grade >= 1 && d.grade <= 6
+        && d.cls is int && d.cls >= 1 && d.cls <= 15
+        && validScore(d.bestScore)
+        && smallInt(d.bestCombo) && smallInt(d.bestCorrect)
+        && d.plays is int
+        && d.updatedAt == request.time;
+    }
+
+    // 학생별 최고 기록
+    match /players/{playerId} {
+      allow read: if true;
+
+      // 첫 게임을 마쳤을 때 만들어짐
+      allow create: if signedIn() && validPlayer(request.resource.data)
+        && request.resource.data.plays == 1
+        && request.resource.data.lastPlayAt == request.time;
+
+      allow update: if signedIn() && resource.data.uid == request.auth.uid
+        && validPlayer(request.resource.data)
+        && (
+          // 닉네임·학교 수정: 점수 관련 값은 그대로
+          (request.resource.data.plays == resource.data.plays
+            && request.resource.data.bestScore == resource.data.bestScore
+            && request.resource.data.bestCombo == resource.data.bestCombo
+            && request.resource.data.bestCorrect == resource.data.bestCorrect
+            && request.resource.data.lastPlayAt == resource.data.lastPlayAt)
+          ||
+          // 새 게임 결과: 한 번에 1판, 앞 판과 50초 이상 간격, 최고 기록은 내려가지 않음
+          (request.resource.data.plays == resource.data.plays + 1
+            && request.time > resource.data.lastPlayAt + duration.value(50, 's')
+            && request.resource.data.lastPlayAt == request.time
+            && request.resource.data.bestScore >= resource.data.bestScore)
+        );
+
+      allow delete: if false;
+    }
+
+    // 학교별 합계 (평균 점수 순위용)
+    function validSchool(d) {
+      return d.keys().hasOnly(['name', 'region', 'total', 'count', 'avg', 'updatedAt'])
+        && d.name is string && d.name.size() > 0 && d.name.size() <= 40
+        && d.region is string && d.region.size() <= 20
+        && d.total is int && d.total >= 0 && d.total <= d.count * 3000
+        && d.count is int && d.count >= 0
+        && d.avg is int && d.avg >= 0 && d.avg <= 3000
+        && d.updatedAt == request.time;
+    }
+
+    match /schools/{schoolId} {
+      allow read: if true;
+      allow create: if signedIn() && validSchool(request.resource.data)
+        && request.resource.data.count == 1;
+      allow update: if signedIn() && validSchool(request.resource.data)
+        && request.resource.data.count - resource.data.count >= -1
+        && request.resource.data.count - resource.data.count <= 1
+        && request.resource.data.total - resource.data.total >= -3000
+        && request.resource.data.total - resource.data.total <= 3000;
+      allow delete: if false;
+    }
+
+    // 모든 게임 기록 (나중에 관리 화면에서 확인용). 학생은 추가만 가능
+    match /records/{recordId} {
+      allow read: if false;
+      allow create: if signedIn()
+        && request.resource.data.keys().hasOnly(['uid', 'playerId', 'schoolCode', 'score', 'maxCombo', 'correct', 'wrong', 'createdAt'])
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.playerId is string
+        && request.resource.data.schoolCode is string
+        && validScore(request.resource.data.score)
+        && smallInt(request.resource.data.maxCombo)
+        && smallInt(request.resource.data.correct)
+        && smallInt(request.resource.data.wrong)
+        && request.resource.data.createdAt == request.time;
+      allow update, delete: if false;
+    }
+  }
+}
