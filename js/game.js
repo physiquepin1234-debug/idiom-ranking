@@ -19,7 +19,7 @@ const Game = (() => {
   // onFinish(result): 게임이 끝났을 때, onQuit(): 중간에 그만뒀을 때
   function start(root, { mode = 'rank', onFinish, onQuit }) {
     const practice = mode === 'practice';
-    const state = { score: 0, combo: 0, maxCombo: 0, correct: 0, wrong: 0, matched: [], review: new Map(), used: new Set() };
+    const state = { round: 0, score: 0, combo: 0, maxCombo: 0, correct: 0, wrong: 0, matched: [], review: new Map(), used: new Set() };
     let playing = false;
     let destroyed = false;
     let clockId = 0;
@@ -66,7 +66,7 @@ const Game = (() => {
               </filter>
             </defs>
             <g id="cy-lines"></g>
-            <line id="cy-drag" class="cy-drag" x1="0" y1="0" x2="0" y2="0"/>
+            <path id="cy-drag" class="cy-drag" d=""/>
           </svg>
           <div class="cy-toast" id="cy-toast" role="status"></div>
         </section>
@@ -102,6 +102,13 @@ const Game = (() => {
         pick = Idioms.pickRound(ROUND_SIZE, state.used);
       }
       pick.forEach((it) => state.used.add(it.id));
+
+      state.round += 1;
+      if (state.round > 1) {
+        Sound.roundStart();
+        Sound.bgmLevel(state.round);
+        bigFlash(`<b data-text="ROUND ${state.round}">ROUND ${state.round}</b>`, 900);
+      }
 
       nodes.forEach((n) => n.el.remove());
       nodes = [];
@@ -159,21 +166,40 @@ const Game = (() => {
       return { x: e.clientX - b.left, y: e.clientY - b.top };
     }
 
-    function setLine(line, p1, p2) {
-      line.setAttribute('x1', p1.x);
-      line.setAttribute('y1', p1.y);
-      line.setAttribute('x2', p2.x);
-      line.setAttribute('y2', p2.y);
+    // 손가락이 지나간 점들을 부드러운 곡선으로 (점 사이 중간점을 이어 각진 곳을 없앰)
+    function smoothPath(pts) {
+      if (pts.length < 3) return pts.map((p, i) => `${i ? 'L' : 'M'}${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join(' ');
+      let d = `M${pts[0].x.toFixed(1)} ${pts[0].y.toFixed(1)}`;
+      for (let i = 1; i < pts.length - 1; i++) {
+        const mx = (pts[i].x + pts[i + 1].x) / 2;
+        const my = (pts[i].y + pts[i + 1].y) / 2;
+        d += ` Q${pts[i].x.toFixed(1)} ${pts[i].y.toFixed(1)} ${mx.toFixed(1)} ${my.toFixed(1)}`;
+      }
+      const last = pts[pts.length - 1];
+      return d + ` L${last.x.toFixed(1)} ${last.y.toFixed(1)}`;
+    }
+
+    // 톡톡으로 이었을 때는 그린 길이 없으므로 S자로 휘는 곡선을 만듭니다.
+    function wavyPath(pa, pb) {
+      const dx = pb.x - pa.x;
+      const dy = pb.y - pa.y;
+      const len = Math.hypot(dx, dy) || 1;
+      const nx = -dy / len;
+      const ny = dx / len;
+      const bend = (40 + Math.random() * 50) * (Math.random() < 0.5 ? -1 : 1);
+      const c1 = { x: pa.x + dx * 0.3 + nx * bend, y: pa.y + dy * 0.3 + ny * bend };
+      const c2 = { x: pa.x + dx * 0.7 - nx * bend, y: pa.y + dy * 0.7 - ny * bend };
+      return `M${pa.x} ${pa.y} C${c1.x} ${c1.y} ${c2.x} ${c2.y} ${pb.x} ${pb.y}`;
     }
 
     // 선 색이 A(청록)→B(분홍)로 이어지도록 선마다 그라데이션을 만듭니다.
-    function addLine(pa, pb, kind) {
+    function addLine(pa, pb, kind, d) {
       const g = svgEl('g', { class: 'cy-link ' + kind });
       const id = 'cy-grad-' + ++lineSeq;
       const grad = svgEl('linearGradient', { id, gradientUnits: 'userSpaceOnUse', x1: pa.x, y1: pa.y, x2: pb.x, y2: pb.y });
       grad.append(svgEl('stop', { offset: '0', class: 'stop-a' }), svgEl('stop', { offset: '1', class: 'stop-b' }));
-      const line = svgEl('line', { x1: pa.x, y1: pa.y, x2: pb.x, y2: pb.y, stroke: `url(#${id})`, filter: 'url(#cy-glow)' });
-      g.append(grad, line);
+      const path = svgEl('path', { d, stroke: `url(#${id})`, filter: 'url(#cy-glow)' });
+      g.append(grad, path);
       linesG.appendChild(g);
       return g;
     }
@@ -226,17 +252,25 @@ const Game = (() => {
     }
 
     // ───── 정답 판정 ─────
-    function attempt(n1, n2) {
+    // trail: 드래그로 그린 점들 (n1 → n2 순서). 톡톡이면 없음
+    function attempt(n1, n2, trail) {
       const a = n1.side === 'a' ? n1 : n2;
       const b = n1.side === 'a' ? n2 : n1;
       const pa = center(a.el);
       const pb = center(b.el);
+      let d;
+      if (trail && trail.length >= 2) {
+        const pts = n1.side === 'a' ? trail : trail.slice().reverse();
+        d = smoothPath([pa, ...pts.slice(1, -1), pb]);
+      } else {
+        d = wavyPath(pa, pb);
+      }
       const idiom = a.item.id === b.item.id ? a.item : Idioms.findPair(a.item.a, b.item.b);
-      if (idiom) onCorrect(a, b, pa, pb, idiom);
-      else onWrong(a, b, pa, pb);
+      if (idiom) onCorrect(a, b, pa, pb, idiom, d);
+      else onWrong(a, b, pa, pb, d);
     }
 
-    function onCorrect(a, b, pa, pb, idiom) {
+    function onCorrect(a, b, pa, pb, idiom, d) {
       state.combo += 1;
       state.maxCombo = Math.max(state.maxCombo, state.combo);
       const gained = SCORE.correct + SCORE.comboStep * (state.combo - 1);
@@ -247,7 +281,7 @@ const Game = (() => {
       nodes = nodes.filter((n) => n !== a && n !== b);
       a.el.classList.add('done');
       b.el.classList.add('done');
-      const link = addLine(pa, pb, 'ok');
+      const link = addLine(pa, pb, 'ok', d);
       later(() => link.remove(), 750);
       later(() => {
         a.el.remove();
@@ -263,14 +297,14 @@ const Game = (() => {
       if (!nodes.length) later(roundClear, 450);
     }
 
-    function onWrong(a, b, pa, pb) {
+    function onWrong(a, b, pa, pb, d) {
       state.combo = 0;
       state.score = Math.max(0, state.score + SCORE.wrong);
       state.wrong += 1;
       state.review.set(a.item.id, a.item);
       state.review.set(b.item.id, b.item);
 
-      const link = addLine(pa, pb, 'bad');
+      const link = addLine(pa, pb, 'bad', d);
       later(() => link.remove(), 450);
       for (const n of [a, b]) {
         n.el.classList.remove('shake');
@@ -290,8 +324,8 @@ const Game = (() => {
       state.score += SCORE.clearBonus;
       updateHud(true);
       Sound.clear();
-      bigFlash(`<b data-text="ROUND CLEAR">ROUND CLEAR</b><small>+${SCORE.clearBonus} BONUS</small>`, 1000);
-      later(() => playing && newRound(), 900);
+      bigFlash(`<b data-text="ROUND CLEAR">ROUND CLEAR</b><small>+${SCORE.clearBonus} BONUS</small>`, 950);
+      later(() => playing && newRound(), 1000);
     }
 
     // ───── 입력: 드래그로 잇기 + 두 번 탭으로 잇기 ─────
@@ -322,7 +356,7 @@ const Game = (() => {
       try {
         board.setPointerCapture(e.pointerId); // 손가락이 판 밖으로 나가도 선을 계속 그리도록
       } catch (err) {}
-      drag = { node, id: e.pointerId, x: e.clientX, y: e.clientY, moved: false };
+      drag = { node, id: e.pointerId, x: e.clientX, y: e.clientY, moved: false, trail: [center(node.el)] };
       node.el.classList.add('active');
       dragLine.setAttribute('class', 'cy-drag side-' + node.side);
       Sound.select();
@@ -335,7 +369,11 @@ const Game = (() => {
         dragLine.classList.add('show');
       }
       if (!drag.moved) return;
-      setLine(dragLine, center(drag.node.el), pointOf(e));
+      // 손가락이 지나간 길을 그대로 기록 (너무 촘촘한 점은 건너뜀)
+      const p = pointOf(e);
+      const last = drag.trail[drag.trail.length - 1];
+      if (Math.hypot(p.x - last.x, p.y - last.y) > 4 && drag.trail.length < 600) drag.trail.push(p);
+      dragLine.setAttribute('d', smoothPath([...drag.trail, p]));
       clearHover();
       const over = nodeAt(e.clientX, e.clientY);
       if (over && over.side !== drag.node.side) over.el.classList.add('hover');
@@ -353,7 +391,7 @@ const Game = (() => {
         const target = nodeAt(e.clientX, e.clientY);
         if (target && target.side !== from.side) {
           setSelected(null);
-          attempt(from, target);
+          attempt(from, target, [...drag.trail, pointOf(e)]);
         } else if (from === selected) {
           setSelected(null);
         }
@@ -387,6 +425,7 @@ const Game = (() => {
       $('cy-bar').style.transform = `scaleX(${left / TIME_LIMIT})`;
       if (sec <= 10 && sec > 0 && sec !== lastSec) {
         lastSec = sec;
+        if (!hud.classList.contains('low')) Sound.bgmHurry();
         hud.classList.add('low');
         Sound.tick();
       }
@@ -396,6 +435,7 @@ const Game = (() => {
     function stopInput() {
       playing = false;
       clearInterval(clockId);
+      Sound.stopBgm();
       setSelected(null);
       drag = null;
       dragLine.classList.remove('show');
@@ -437,6 +477,7 @@ const Game = (() => {
         playing = true;
         startAt = performance.now();
         startClock();
+        Sound.startBgm();
       }, steps.length * 650);
     }
 
@@ -470,6 +511,7 @@ const Game = (() => {
       destroyed = true;
       playing = false;
       clearInterval(clockId);
+      Sound.stopBgm();
       timers.forEach(clearTimeout);
       window.removeEventListener('resize', onResize);
     };

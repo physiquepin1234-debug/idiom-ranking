@@ -88,12 +88,12 @@ body.is-cyber {
   background: linear-gradient(transparent, rgba(33, 230, 255, 0.35), rgba(255, 63, 212, 0.35), transparent);
 }
 .cy-svg { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 1; pointer-events: none; overflow: visible; }
-.cy-drag { stroke-width: 3; stroke-dasharray: 8 6; stroke-linecap: round; opacity: 0; animation: cy-dash 0.5s linear infinite; }
+.cy-drag { fill: none; stroke-width: 3; stroke-dasharray: 8 6; stroke-linecap: round; stroke-linejoin: round; opacity: 0; animation: cy-dash 0.5s linear infinite; }
 .cy-drag.show { opacity: 1; }
 .cy-drag.side-a { stroke: var(--cy-a); filter: drop-shadow(0 0 4px var(--cy-a)); }
 .cy-drag.side-b { stroke: var(--cy-b); filter: drop-shadow(0 0 4px var(--cy-b)); }
 @keyframes cy-dash { to { stroke-dashoffset: -14; } }
-.cy-link line { stroke-width: 5; stroke-linecap: round; }
+.cy-link path { fill: none; stroke-width: 5; stroke-linecap: round; stroke-linejoin: round; }
 .cy-link .stop-a { stop-color: var(--cy-a); }
 .cy-link .stop-b { stop-color: var(--cy-b); }
 .cy-link.ok { animation: cy-link-ok 0.75s ease-out forwards; }
