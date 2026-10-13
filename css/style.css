@@ -78,18 +78,60 @@ h1, h2, h3 { font-family: var(--font-display); font-weight: 400; margin: 0; }
 
 /* ── 시작 화면 ── */
 .home {
-  min-height: 100vh; max-width: 760px; margin: 0 auto;
-  display: flex; flex-direction: column; justify-content: center; gap: 28px;
-  padding: 32px 16px;
+  position: relative; isolation: isolate;
+  min-height: 100vh; max-width: 900px; margin: 0 auto;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px;
+  padding: 16px 16px 28px;
 }
-.home-hero { text-align: center; }
-.home-kicker { color: var(--muted); margin: 0 0 8px; font-weight: 600; }
-.home-title { font-size: clamp(44px, 9vw, 76px); line-height: 1.1; }
-.home-title span { color: var(--primary); }
+/* 같은 그림을 흐리게 깔아 화면 전체 분위기를 맞춤 */
+.home-bg {
+  position: fixed; inset: -60px; z-index: -1; pointer-events: none;
+  background: url('../images/home.webp') center / cover;
+  filter: blur(32px) saturate(1.3); opacity: 0.45;
+}
+.home-hero {
+  margin: 0; width: min(100%, calc(47vh * 1672 / 941));
+  aspect-ratio: 1672 / 941; overflow: hidden;
+  border-radius: 24px; border: 4px solid #fff;
+  box-shadow: 0 12px 30px rgba(40, 70, 140, 0.25);
+}
+.home-hero img { display: block; width: 100%; height: 100%; object-fit: cover; }
+/* 그림 아래쪽에 걸친 게임 로고 판 */
+.home-logo {
+  position: relative; margin-top: -68px; z-index: 1;
+  padding: 26px 34px 14px; text-align: center;
+  background: #fff; border: 4px solid #ffd54a; border-radius: 28px;
+  box-shadow: 0 7px 0 #f2b622, 0 16px 30px rgba(0, 0, 0, 0.18);
+  animation: logo-pop 0.6s cubic-bezier(0.2, 1.6, 0.4, 1) both;
+}
+.home-kicker {
+  position: absolute; top: -20px; left: 50%; transform: translateX(-50%);
+  margin: 0; padding: 7px 20px; white-space: nowrap;
+  background: linear-gradient(#5b9bff, #2f6be0); color: #fff; border-radius: 999px;
+  font-family: var(--font-display); font-size: clamp(16px, 2.4vw, 20px);
+  box-shadow: 0 4px 0 #1f4fae;
+}
+.home-title {
+  font-family: 'Black Han Sans', var(--font-display); line-height: 1.05;
+  display: flex; flex-wrap: wrap; align-items: baseline; justify-content: center; gap: 0 14px;
+}
+.home-title .t1 { font-size: clamp(30px, 5.4vw, 50px); color: #24345f; }
+.home-title .t2 {
+  font-size: clamp(44px, 8vw, 74px);
+  background: linear-gradient(180deg, #ffc62e 10%, #ff6a3d 90%);
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+  filter: drop-shadow(0 3px 0 #c2410c);
+}
+@keyframes logo-pop { from { transform: scale(0.6); opacity: 0; } }
 .profile-chip {
   display: inline-flex; gap: 8px; align-items: center;
-  margin-top: 20px; padding: 10px 18px; border-radius: 999px;
+  padding: 10px 18px; border-radius: 999px;
   background: var(--surface); box-shadow: var(--shadow); font-size: 16px;
+}
+.home .btn-start { width: 100%; max-width: 640px; }
+.home .home-menu { width: 100%; }
+@media (max-width: 560px) {
+  .home-logo { margin-top: -40px; padding: 24px 18px 12px; }
 }
 .profile-chip .edit { color: var(--primary); font-weight: 800; font-size: 14px; }
 .profile-chip.is-empty { background: var(--me); font-weight: 600; }

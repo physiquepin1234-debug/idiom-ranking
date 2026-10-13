@@ -47,11 +47,15 @@ const App = (() => {
 
     app.innerHTML = `
       <main class="home">
-        <div class="home-hero">
-          <p class="home-kicker">우리 몸으로 배우는 관용 표현</p>
-          <h1 class="home-title">전국 관용표현<br><span>랭킹전</span></h1>
-          ${who}
+        <div class="home-bg" aria-hidden="true"></div>
+        <figure class="home-hero">
+          <img src="images/home.webp" alt="관용표현을 떠올리며 고민하는 아이들과 우승 트로피" width="1672" height="941">
+        </figure>
+        <div class="home-logo">
+          <p class="home-kicker">게임으로 배우는 관용표현</p>
+          <h1 class="home-title"><span class="t1">전국 관용표현</span> <span class="t2">랭킹전</span></h1>
         </div>
+        ${who}
         <a class="btn-start" href="#/game">게임 시작 ▶</a>
         <nav class="home-menu">
           <a class="menu-card" href="#/howto"><span class="icon">📖</span>게임방법</a>
